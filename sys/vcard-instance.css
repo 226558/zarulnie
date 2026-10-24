@@ -1,0 +1,48 @@
+@font-face {
+  font-family: "Oswald";
+  src: url("../usr/fonts/oswald.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 700;
+  font-display: swap;
+}
+
+:root {
+  --vc-page-font: "Oswald", "Times New Roman", serif;
+  --vc-song-title-font: "Oswald", "Times New Roman", serif;
+}
+
+.zarul-wheel {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 0.75em;
+  height: 0.75em;
+  vertical-align: -0.05em;
+  background-color: currentColor;
+  -webkit-mask: url("../usr/brand/steering-wheel.svg") center / contain no-repeat;
+  mask: url("../usr/brand/steering-wheel.svg") center / contain no-repeat;
+}
+
+.zarul-car {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  background-color: currentColor;
+  -webkit-mask: url("../usr/brand/car.svg") center / contain no-repeat;
+  mask: url("../usr/brand/car.svg") center / contain no-repeat;
+}
+
+.site-brand .zarul-car {
+  font-size: 0.65em;
+  line-height: 1;
+}
+
+@media (max-width: 420px) {
+  .site-brand .zarul-wheel {
+    width: 0.6em;
+    height: 0.6em;
+  }
+  .site-brand .zarul-car {
+    font-size: 0.55em;
+  }
+}
