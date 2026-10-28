@@ -48,13 +48,14 @@
     dialog.setAttribute('aria-label', 'Ключ доступа к песням');
     dialog.style.cssText = 'color:#fff;background:#161616;border:1px solid #ddd;max-width:90vw;font:18px monospace;padding:1.2em';
     const form = document.createElement('form');
+    form.style.textAlign = 'center';
     const label = document.createElement('label');
     label.textContent = 'Ключ доступа к текстам и MP3';
     const input = document.createElement('input');
     input.type = 'password';
     input.autocomplete = 'off';
     input.required = true;
-    input.style.cssText = 'display:block;margin:1em 0;font:inherit;max-width:70vw';
+    input.style.cssText = 'display:block;margin:1em auto;font:inherit;max-width:70vw';
     label.append(input);
     const submit = document.createElement('button');
     submit.type = 'submit';
@@ -63,6 +64,12 @@
     const message = document.createElement('p');
     message.setAttribute('role', 'status');
     form.append(label, submit, message);
+    if (window.VCardContact) {
+      const contact = document.createElement('div');
+      contact.style.marginTop = '1em';
+      contact.append(window.VCardContact.createLink());
+      form.append(contact);
+    }
     dialog.append(form);
     dialog.addEventListener('cancel', event => event.preventDefault());
     form.addEventListener('submit', async event => {

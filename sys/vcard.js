@@ -1,4 +1,3 @@
-const email0 = '356';
 const vcardFileMode = location.protocol === 'file:';
 // Initial navigation owns the viewport; the browser must not override it
 // with the previous card's scroll position after bootstrap.
@@ -13536,27 +13535,6 @@ const createVCardFrameInitializer = () => {
       });
   })();
 
-  // Email copy handler
-  (() => {
-    const email1 = '475';
-    const emailLink = document.getElementById('email-link');
-    if (emailLink) {
-      const scope = new AbortController();
-      window.addEventListener('pagehide', (event) => {
-        if (!event.persisted) scope.abort();
-      }, { signal: scope.signal });
-      emailLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        const email2 = '@gmail.com';
-        const email = email0 + email1 + email2;
-        navigator.clipboard.writeText(email).then(() => {
-          if (!scope.signal.aborted) alert('скопирован в буфер обмена');
-        }).catch(() => {
-          if (!scope.signal.aborted) alert('Не удалось скопировать: ' + email);
-        });
-      }, { signal: scope.signal });
-    }
-  })();
   (() => {
     const root = document.documentElement;
     const STORAGE_KEY = 'vcard-background-mode';
