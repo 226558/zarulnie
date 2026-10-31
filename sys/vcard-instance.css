@@ -1,0 +1,69 @@
+@font-face {
+  font-family: "Oswald";
+  src: url("../usr/fonts/oswald.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 700;
+  font-display: swap;
+}
+
+:root {
+  --vc-page-font: "Oswald", "Times New Roman", serif;
+  --vc-song-title-font: "Oswald", "Times New Roman", serif;
+}
+
+:root[data-color-preset] .song-vibeframe :is(video.song-portal-video--crossani, img.song-portal-crossani-still) {
+  filter: none !important;
+}
+
+:root[data-color-preset="duo"] .song-vibeframe :is(.song__preview-image:not(.song-portal-crossani-still):not(.song-portal-play-ani-still), .vcard-portal-crossfade-previous) {
+  filter: brightness(1.5) !important;
+}
+
+.zarul-logo {
+  display: block;
+  width: 5em;
+  height: 5em;
+  margin: 0 auto 0.4em;
+  object-fit: contain;
+  filter: url("#vc-logo-bevel-tint") brightness(1.35);
+}
+
+:root[data-color-preset="newspaper"] .zarul-logo {
+  filter: brightness(0.7);
+}
+
+.zarul-wheel {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 0.75em;
+  height: 0.75em;
+  vertical-align: -0.05em;
+  background-color: currentColor;
+  -webkit-mask: url("../usr/brand/steering-wheel.svg") center / contain no-repeat;
+  mask: url("../usr/brand/steering-wheel.svg") center / contain no-repeat;
+}
+
+.zarul-car {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  background-color: currentColor;
+  -webkit-mask: url("../usr/brand/car.svg") center / contain no-repeat;
+  mask: url("../usr/brand/car.svg") center / contain no-repeat;
+}
+
+.site-brand .zarul-car {
+  font-size: 0.65em;
+  line-height: 1;
+}
+
+@media (max-width: 420px) {
+  .site-brand .zarul-wheel {
+    width: 0.6em;
+    height: 0.6em;
+  }
+  .site-brand .zarul-car {
+    font-size: 0.55em;
+  }
+}

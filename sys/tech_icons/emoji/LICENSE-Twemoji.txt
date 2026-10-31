@@ -1,0 +1,4 @@
+Twemoji 16.0.1. Graphics copyright Twitter, Inc. and other contributors.
+Licensed under CC BY 4.0: https://creativecommons.org/licenses/by/4.0/
+Source: https://github.com/jdecked/twemoji
+SVG artwork is unmodified; displayed with the site technical-icon styling.
