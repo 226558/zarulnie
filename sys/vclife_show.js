@@ -544,12 +544,12 @@
       this.prepareShow();
     }
 
-    prepareShow(sourceScope = null) {
+    prepareShow() {
       this.preparation?.cancel('show-replaced');
       const profile = this.song.life.lastShowProfile;
-      profile.preparePreview(this, sourceScope);
+      profile.preparePreview(this);
       const request = new TShowPreparation(this, profile, this.sourceScope,
-        { event: sourceScope ? 'Show.Next' : 'Song.Open', entryKey: this.song.identity.entryKey });
+        { event: 'Song.Open', entryKey: this.song.identity.entryKey });
       return request.prepare((source) => {
         this.showSource = source;
         return this.song.opened ? profile.showPreview(this, source) : true;
@@ -595,7 +595,6 @@
       this.song = playback.song;
       this.playAni = new PlayAniObj(this);
       this.firstVerseShown = false;
-      this.grayUntilEnd = false;
       this.lastPlan = null;
       this.slideTimeline = null;
       this.overlayTimeline = null;
@@ -622,7 +621,7 @@
         this.portal()?.closeIdle?.(this.song.preview);
         this.portal()?.open?.(this.song.preview, {
           keepImage: playback.profile.usesTV() && playback.sourceScope === 'song' && !songEnvironment.songTVAbsent,
-          frame: playback.profile.usesTV() ? playback.profile.previewFrame() : null,
+          frame: playback.profile.usesTV() ? playback.profile.initialFrame(this) : null,
         });
         this.portal()?.start?.(this.song.preview);
       }
@@ -661,15 +660,6 @@
         return changingProfile ? true : this.portal()?.prepareStart?.(this.song.preview,
           playback.profile.initialFrame(this), request.signal);
       }, 'Show.Ready', 'ResourceFailure');
-    }
-
-    nextShow() {
-      const playback = this.playback;
-      if (this.dead || playback.dead || playback.state === 'failed' || playback.state === 'ended') return false;
-      if (!playback.profile.usesTV() || this.song.environment.songTVAbsent) return false;
-      this.onPlaybackStart(playback, true);
-      if (playback.lastVerseDetail) playback.verse({ ...playback.lastVerseDetail, seeked: true });
-      return true;
     }
 
     onPlaying() {
@@ -803,7 +793,6 @@
     }
 
     async onEnd(playback, signal) {
-      this.grayUntilEnd = false;
       this.song.life.publish();
       this.slideTimeline?.reset('song-ended');
       this.overlayTimeline?.reset('song-ended');
@@ -825,12 +814,10 @@
     }
 
     onEnded() {
-      this.grayUntilEnd = false;
       this.portal()?.ended?.();
     }
 
     onFailed(playback) {
-      this.grayUntilEnd = false;
       this.preparation?.cancel('playback-failed');
       this.slideTimeline?.die('playback-failed');
       this.overlayTimeline?.die('playback-failed');
@@ -842,7 +829,6 @@
         ...super.snapshot(),
         playAni: this.playAni.snapshot(),
         firstVerseShown: this.firstVerseShown,
-        grayUntilEnd: this.grayUntilEnd,
         sourceScope: this.playback.sourceScope,
         songTVAbsent: this.song.environment.songTVAbsent,
         showPreset: this.playback.showPreset || null,
@@ -1339,25 +1325,6 @@
       };
       window.VCCommands = Object.freeze({ available: commandAvailable, dispatch: dispatchCommand });
       window.VCPlayer = Object.freeze({
-        nextShow: () => command('Show.Next', () => {
-          const song = life.openedSong || life.playingSong;
-          if (!song) return false;
-          const environment = song.playback?.playbackEnvironment;
-          if (environment && !song.playback.dead && !['ended', 'failed'].includes(song.playback.state)) return environment.nextShow();
-          life.visualWorld.portal?.close?.(song.preview);
-          song.environment.prepareShow('song');
-          return true;
-        }),
-        grayShow: () => command('Show.GrayUntilEnd', () => {
-          const playback = life.playingSong?.playback;
-          const environment = playback?.playbackEnvironment;
-          if (!environment || playback.dead || ['ended', 'failed'].includes(playback.state)) return false;
-          environment.grayUntilEnd = true;
-          environment.slideTimeline?.reset('show-gray');
-          if (playback.lastVerseDetail) playback.verse({ ...playback.lastVerseDetail, seeked: true });
-          life.publish();
-          return true;
-        }),
         open: (target) => dispatchCommand({ type: 'Song.Open', target }),
         close: (target) => dispatchCommand({ type: 'Song.Close', target }),
         start: (target, options) => dispatchCommand({ type: 'Playback.Start', target, options }),

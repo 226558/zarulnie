@@ -10,7 +10,10 @@
   const content = document.getElementById('content');
   const screen = document.getElementById('screen');
   const navSlots = document.querySelectorAll('header [data-mini-nav]');
+  const navLabels = Object.fromEntries([...navSlots].map(node => [node.dataset.miniNav, node.dataset.miniLabel]));
   const playButton = document.getElementById('play');
+  const playLabel = playButton.dataset.playLabel ?? playButton.textContent;
+  const pauseLabel = playButton.dataset.pauseLabel ?? 'PAUSE';
   const seek = document.getElementById('seek');
   const volume = document.getElementById('volume');
   const clock = document.getElementById('time');
@@ -35,8 +38,8 @@
   } catch (_) { }
   if (!saved || typeof saved !== 'object' || Array.isArray(saved) || saved.version !== 1) saved = {};
   const preferences = { ...data.defaults, ...(saved.preferences || {}) };
-  const fontFamilies = [['serif', 'С засечками'], ['sans-serif', 'Без засечек'], ['monospace', 'Моноширинный'], ['system-ui', 'Системный интерфейсный']];
-  preferences.fontFamily = fontFamilies.some(([value]) => value === preferences.fontFamily) ? preferences.fontFamily : 'serif';
+  const fontFamilies = [['Fairfax', 'Fairfax'], ['serif', 'С засечками'], ['sans-serif', 'Без засечек'], ['monospace', 'Моноширинный'], ['system-ui', 'Системный интерфейсный']];
+  preferences.fontFamily = fontFamilies.some(([value]) => value === preferences.fontFamily) ? preferences.fontFamily : 'Fairfax';
   preferences.theme = ['system', 'light', 'dark'].includes(preferences.theme) ? preferences.theme : 'system';
   preferences.fontSize = Math.max(14, Math.min(36, Number(preferences.fontSize) || 20));
   const excluded = saved.excluded && typeof saved.excluded === 'object' && !Array.isArray(saved.excluded) ? saved.excluded : {};
@@ -156,7 +159,8 @@
   function applyPreferences() {
     document.documentElement.dataset.theme = preferences.theme === 'system' ? (systemTheme.matches ? 'dark' : 'light') : preferences.theme;
     document.documentElement.style.fontSize = `${preferences.fontSize}px`;
-    document.documentElement.style.fontFamily = preferences.fontFamily;
+    document.documentElement.style.lineHeight = String(data.lineHeight || 1.35);
+    document.documentElement.style.fontFamily = preferences.fontFamily === 'Fairfax' ? '"Fairfax", monospace' : preferences.fontFamily;
   }
   systemTheme.addEventListener('change', applyPreferences);
   applyPreferences();
@@ -194,6 +198,10 @@
   function link(text, view) {
     const node = el('a', text);
     node.href = href(view);
+    if (view.kind === 'map') {
+      node.title = 'Карта релизов';
+      node.setAttribute('aria-label', node.title);
+    }
     node.addEventListener('click', event => {
       if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
@@ -215,22 +223,24 @@
       return node;
     };
     const lists = document.createDocumentFragment();
-    lists.append(navLink('Списки', {kind:'root'}));
-    const full = el('a', 'FULL');
+    lists.append(navLink(navLabels.lists ?? 'Списки', {kind:'root'}));
+    const full = el('a', navLabels.full ?? 'FULL');
+    full.title = 'Открыть полное представление';
+    full.setAttribute('aria-label', full.title);
     const fullUrl = new URL(siteRoot);
     for (const key of ['list','song']) {
       const value = new URL(href(route)).searchParams.get(key);
       if (value) fullUrl.searchParams.set(key, value);
     }
-    full.href = fullUrl.href;
+    full.setAttribute('href', `../${fullUrl.search}`);
     const list = listById(route.list);
     if (list) lists.append(document.createTextNode(' > '), navLink(list.title, {kind:'list', list:list.id}));
     const song = data.songs[route.song];
     if (song) lists.append(document.createTextNode(' > '), navLink(song.title, {kind:'song', list:list?.id || song.list, song:song.key}));
     for (const slot of navSlots) {
       const kind = slot.dataset.miniNav;
-      if (kind === 'opt') slot.replaceChildren(navLink('Настройки', {...route, kind:'opt'}));
-      else if (kind === 'map') slot.replaceChildren(navLink('RMAP', {...route, kind:'map'}));
+      if (kind === 'opt') slot.replaceChildren(navLink(navLabels.opt ?? 'Настройки', {...route, kind:'opt'}));
+      else if (kind === 'map') slot.replaceChildren(navLink(navLabels.map ?? 'RMAP', {...route, kind:'map'}));
       else if (kind === 'lists') slot.replaceChildren(lists);
       else if (kind === 'full') slot.replaceChildren(full);
     }
@@ -246,14 +256,20 @@
   }
   function setAll(list, value) { excluded[list.id] = value ? [] : [...list.songs]; }
   function selectionActions(list) {
-    const bar = el('div', undefined, 'list-actions');
+    const bar = el('div', undefined, 'list-actions list-actions--selection');
     const selectAll = value => { (list ? [list] : allLists()).forEach(l => setAll(l, value)); persist(); nextCandidate = null; render(); };
-    bar.append(action('ВыбратьВсе', () => selectAll(true)),
-      action('СброситьВсе', () => selectAll(false)),
-      action('ДобавитьСписок', saveList));
-    const remove = action('УдалитьСписок', () => removeList(list));
-    remove.disabled = !list?.user;
-    bar.append(remove);
+    bar.innerHTML = data.listActionsHtml || '';
+    const handlers = {
+      SELECT_ALL: () => selectAll(true),
+      CLEAR_ALL: () => selectAll(false),
+      ADD_LIST: saveList,
+      REMOVE_LIST: () => removeList(list),
+    };
+    bar.querySelectorAll('[data-list-action]').forEach(button => {
+      const name = button.dataset.listAction;
+      if (handlers[name]) button.addEventListener('click', handlers[name]);
+      if (name === 'REMOVE_LIST') button.disabled = !list?.user;
+    });
     return bar;
   }
   async function dialog(title, body, yes = 'Да') {
@@ -315,7 +331,6 @@
     activeVerse = -1;
     if (route.kind === 'opt') { settings(); return; }
     if (route.kind === 'map') {
-      screen.append(el('h2', 'RMAP', 'screen-title'));
       if (data.rmapHtml) {
         const map = document.createElement('template');
         map.innerHTML = data.rmapHtml;
@@ -330,12 +345,7 @@
       return;
     }
     if (route.kind === 'root') {
-      screen.append(el('h2', 'СПИСКИ', 'screen-title'));
       const ul = el('ul');
-      if (data.releaseMap) {
-        const row = el('li', undefined, 'entry');
-        row.append(link('RMAP', {kind:'map'})); ul.append(row);
-      }
       for (const list of allLists()) {
         const count = list.songs.filter(k => selected(list, k)).length;
         const row = el('li', undefined, 'entry');
@@ -473,7 +483,7 @@
         if (audio.getAttribute('src') !== source) { audio.src = source; audio.load(); }
       } catch (_) { message('Не удалось расшифровать MP3. Откройте песню ещё раз.'); return; }
     }
-    audio.play().catch(error => { if (current?.key === expected && error.name !== 'AbortError') message('Не удалось начать воспроизведение. Нажмите PLAY ещё раз.'); });
+    audio.play().catch(error => { if (current?.key === expected && error.name !== 'AbortError') message(`Не удалось начать воспроизведение. Нажмите ${playLabel} ещё раз.`); });
   }
   function advance(direction, automatic = false) {
     const next = following(direction);
@@ -493,10 +503,12 @@
     if (current?.audio) cacheMedia(current.audio).catch(() => {});
     if (preferences.autoNext) advance(1, true);
   });
-  audio.addEventListener('error', () => { if (current) message('Аудио недоступно. Проверьте соединение и нажмите PLAY.'); });
+  audio.addEventListener('error', () => { if (current) message(`Аудио недоступно. Проверьте соединение и нажмите ${playLabel}.`); });
   const time = seconds => `${Math.floor((Number.isFinite(seconds) ? seconds : 0) / 60).toString().padStart(2,'0')}:${Math.floor((Number.isFinite(seconds) ? seconds : 0) % 60).toString().padStart(2,'0')}`;
   function syncPlayer() {
-    playButton.textContent = audio.paused ? 'PLAY' : 'PAUSE';
+    playButton.textContent = audio.paused ? playLabel : pauseLabel;
+    playButton.title = audio.paused ? 'Воспроизвести песню' : 'Приостановить воспроизведение';
+    playButton.setAttribute('aria-label', playButton.title);
     document.getElementById('prev').disabled = !current;
     document.getElementById('next').disabled = !current;
     const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
@@ -548,7 +560,6 @@
     screen.append(row);
   }
   function settings() {
-    screen.append(el('h2', 'Настройки', 'screen-title'));
     const theme = el('select');
     for (const [value,label] of [['system','Система'],['light','Светлая'],['dark','Тёмная']]) {
       const option = el('option', label); option.value = value; theme.append(option);

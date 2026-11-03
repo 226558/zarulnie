@@ -1060,13 +1060,16 @@ const vcardMediaCache = (() => {
 window.vcardMediaCache = vcardMediaCache;
 
 // Resolve at click time: playback/navigation can change the current song.
-document.getElementById('vcard-mini-link')?.addEventListener('click', (event) => {
+const vcardMiniUrl = () => {
   const target = new URL('m/', location.href);
   const current = new URL(location.href);
   for (const key of ['list', 'song']) {
     if (current.searchParams.has(key)) target.searchParams.set(key, current.searchParams.get(key));
   }
-  event.currentTarget.href = target.href;
+  return target.href;
+};
+document.getElementById('vcard-mini-link')?.addEventListener('click', (event) => {
+  event.currentTarget.href = vcardMiniUrl();
 });
 
 const vcardSettingEnabled = (storageKey, defaultName, fallback = 'on') => (
@@ -2068,6 +2071,11 @@ const portalController = (() => {
       : preview?.querySelector('.song__preview-image') || null
   );
 
+  const displayedPortalImage = (preview = state.preview) => {
+    const slot = preview === state.preview ? state.scene?.current : null;
+    return slot?.kind === 'image' && slot.photoImage ? slot.photoImage : portalImage(preview);
+  };
+
   const publishPortalControllerState = () => {
     if (portalMediaScope.signal.aborted) return;
     document.dispatchEvent(new CustomEvent('vcard:portal-controller-state', {
@@ -2122,11 +2130,6 @@ const portalController = (() => {
   };
 
   const projectPortalState = (snapshot) => {
-    const gray = snapshot.playingSong?.playback?.environment?.grayUntilEnd ? 'on' : 'off';
-    if (document.documentElement.dataset.showGray !== gray) {
-      document.documentElement.dataset.showGray = gray;
-      vcardMedia.refreshPortalFrames();
-    }
     if (!snapshot.playbackChain) return;
     state.chain = { ...snapshot.playbackChain, revision: snapshot.revision,
       actionEntryKey: (snapshot.playbackChain.autoReadyPending
@@ -3283,6 +3286,7 @@ const portalController = (() => {
     finishAnimated,
     finishStatic,
     imageFor: portalImage,
+    displayedImageFor: displayedPortalImage,
     hasSongTV: (preview) => Boolean(portalImage(preview)?.dataset.portalTv),
     open,
     openIdle,
@@ -3329,6 +3333,7 @@ if (portalController) {
     current: portalController.current,
     frameActive: portalController.frameActive,
     imageFor: portalController.imageFor,
+    displayedImageFor: portalController.displayedImageFor,
     hasSongTV: portalController.hasSongTV,
     ended: portalController.ended,
     failed: portalController.failed,
@@ -5013,17 +5018,45 @@ const vcardMedia = (() => {
   ) => {
     let chunkStarted = performance.now();
     const output = new ImageData(basePixels.width, basePixels.height);
-    // Recolour around the source luminance instead of lifting the object to
-    // the accent's brightness. Highlights and shadows keep their original level.
-    const targetRed = accent[0] / 255;
-    const targetGreen = accent[1] / 255;
-    const targetBlue = accent[2] / 255;
-    const targetLuminance = targetRed * 0.3 + targetGreen * 0.59 + targetBlue * 0.11;
-    const redChroma = targetRed - targetLuminance;
-    const greenChroma = targetGreen - targetLuminance;
-    const blueChroma = targetBlue - targetLuminance;
-    const minimumChroma = Math.min(redChroma, greenChroma, blueChroma);
-    const maximumChroma = Math.max(redChroma, greenChroma, blueChroma);
+    // Keep masked objects vivid even when the page accent itself is dark:
+    // preserve its hue ratios and lift its strongest channel to full intensity.
+    const accentPeak = Math.max(accent[0], accent[1], accent[2]);
+    const targetRed = accentPeak > 0 ? accent[0] / accentPeak : 1;
+    const targetGreen = accentPeak > 0 ? accent[1] / accentPeak : 1;
+    const targetBlue = accentPeak > 0 ? accent[2] / accentPeak : 1;
+    const targetLuminance = (
+      targetRed * 0.3
+      + targetGreen * 0.59
+      + targetBlue * 0.11
+    );
+    let maskedLuminance = 0;
+    let maskWeight = 0;
+    for (let start = 0; start < basePixels.data.length; start += portalRenderChunkBytes) {
+      if (!shouldContinue()) return null;
+      const end = Math.min(basePixels.data.length, start + portalRenderChunkBytes);
+      for (let index = start; index < end; index += 4) {
+        const weight = (
+          maskPixels.data[index] * 0.2126
+          + maskPixels.data[index + 1] * 0.7152
+          + maskPixels.data[index + 2] * 0.0722
+        ) * (maskPixels.data[index + 3] / 255);
+        if (weight <= 0) continue;
+        const sourceLuminance = (
+          (basePixels.data[index] / 255) * 0.3
+          + (basePixels.data[index + 1] / 255) * 0.59
+          + (basePixels.data[index + 2] / 255) * 0.11
+        );
+        maskedLuminance += sourceLuminance * weight;
+        maskWeight += weight;
+      }
+      if (performance.now() - chunkStarted >= 4 && end < basePixels.data.length) {
+        await yieldPortalRender(shouldContinue, signal);
+        chunkStarted = performance.now();
+      }
+    }
+    const sourceCenter = maskWeight > 0
+      ? maskedLuminance / maskWeight
+      : targetLuminance;
     for (let start = 0; start < basePixels.data.length; start += portalRenderChunkBytes) {
       if (!shouldContinue()) return null;
       const end = Math.min(basePixels.data.length, start + portalRenderChunkBytes);
@@ -5036,14 +5069,44 @@ const vcardMedia = (() => {
           + sourceGreen * 0.59
           + sourceBlue * 0.11
         );
-        const chromaScale = Math.min(
+        const materialLuminance = Math.max(0, Math.min(
           1,
-          minimumChroma < 0 ? sourceLuminance / -minimumChroma : 1,
-          maximumChroma > 0 ? (1 - sourceLuminance) / maximumChroma : 1
-        );
-        const red = sourceLuminance + redChroma * chromaScale;
-        const green = sourceLuminance + greenChroma * chromaScale;
-        const blue = sourceLuminance + blueChroma * chromaScale;
+          targetLuminance + (sourceLuminance - sourceCenter) * 0.8
+        ));
+        const luminanceShift = materialLuminance - targetLuminance;
+        let red = targetRed + luminanceShift;
+        let green = targetGreen + luminanceShift;
+        let blue = targetBlue + luminanceShift;
+        const minimum = Math.min(red, green, blue);
+        const maximum = Math.max(red, green, blue);
+        if (minimum < 0 && materialLuminance > 0) {
+          red = materialLuminance + (
+            (red - materialLuminance) * materialLuminance
+            / (materialLuminance - minimum)
+          );
+          green = materialLuminance + (
+            (green - materialLuminance) * materialLuminance
+            / (materialLuminance - minimum)
+          );
+          blue = materialLuminance + (
+            (blue - materialLuminance) * materialLuminance
+            / (materialLuminance - minimum)
+          );
+        }
+        if (maximum > 1 && materialLuminance < 1) {
+          red = materialLuminance + (
+            (red - materialLuminance) * (1 - materialLuminance)
+            / (maximum - materialLuminance)
+          );
+          green = materialLuminance + (
+            (green - materialLuminance) * (1 - materialLuminance)
+            / (maximum - materialLuminance)
+          );
+          blue = materialLuminance + (
+            (blue - materialLuminance) * (1 - materialLuminance)
+            / (maximum - materialLuminance)
+          );
+        }
         const maskLuminance = (
           maskPixels.data[index] * 0.2126
           + maskPixels.data[index + 1] * 0.7152
@@ -5926,16 +5989,44 @@ const vcardMedia = (() => {
 
   const portalMaskState = (image) => {
     const state = mediaStates.get(image);
-    if (!state) return { uses: false, available: false, ready: false };
+    if (!state) return { uses: false, available: false, ready: false,
+      reason: 'not-initialized', mode: '-', debugStyle: 'auto',
+      preset: root.dataset.colorPreset, accentEnabled: root.dataset.accent };
     const source = state.sourceKey || image.getAttribute('src') || '';
+    const maskSource = state.groups[state.index]?.mask
+      || portalStyleSpec({ ...state, frameUsesMask: true }, source, false).mask || '';
     const canvas = image.closest('.vcard-portal-motion-layer')?.querySelector(
       ':scope > .vcard-portal-mask-overlay.is-ready'
     );
+    const canvasStyle = canvas ? getComputedStyle(canvas) : null;
+    const debugStyle = debugStyles.get(debugStyleOwner(image)) || 'auto';
+    const fullscreen = Boolean(window.VCardPortalLayout?.isFullscreen(image));
+    const reason = vcardFileMode ? 'file-protocol'
+      : fullscreen ? 'fullscreen'
+      : root.dataset.colorPreset === 'newspaper' ? 'newspaper'
+      : root.dataset.visBri === '0' ? 'background-off'
+      : !state.frameUsesMask ? (debugStyle !== 'auto' ? 'debug-style' : 'scenario-off')
+      : !maskSource ? 'missing-file'
+      : !canvas ? 'not-ready'
+      : canvasStyle.display === 'none' ? 'css-hidden'
+      : Number(canvasStyle.opacity) === 0 ? 'transparent' : 'visible';
     return {
       uses: Boolean(state.frameUsesMask),
-      available: Boolean(state.frameUsesMask
-        && (state.groups[state.index]?.mask || portalStyleSpec(state, source, false).mask)),
+      available: Boolean(maskSource),
       ready: Boolean(canvas),
+      reason,
+      mode: state.frameMaskMode,
+      source,
+      maskSource,
+      debugStyle,
+      preset: root.dataset.colorPreset,
+      choice: window.VCardDecoration?.current()?.choice || root.dataset.colorPreset,
+      accentEnabled: root.dataset.accent,
+      brightness: root.dataset.visBri,
+      targetAccent: currentAccentColor(),
+      renderedAccent: canvas?.vcardPairSource?.split('\n').at(-1) || '',
+      display: canvasStyle?.display || '',
+      opacity: canvasStyle?.opacity || '',
     };
   };
 
@@ -6270,7 +6361,6 @@ const vcardMedia = (() => {
     state.debugBaseFrame = { ...step };
     const debugStyle = debugStyles.get(debugStyleOwner(image));
     if (debugStyle) step = { ...step, style: debugStyle, maskMode: 'off', keepPhysicalIndex: true };
-    if (document.documentElement.dataset.showGray === 'on') step = { ...step, maskMode: 'off' };
     const source = String(step.source || 'img').toLocaleLowerCase();
     const requestedStyle = step.style === undefined || step.style === null
       ? 'vc'
@@ -7007,9 +7097,7 @@ const vcardMedia = (() => {
       });
       const bag = vcardSelectionBag(`shows.${profile}.${catalogUrl}.${releaseKey || releaseId}`,
         candidates, (show) => show.name);
-      const reservation = bag.reserve({ origin,
-        allow: (show) => origin?.event !== 'Show.Next' || candidates.length < 2
-          || show.name !== image.vcardShowSelection?.name });
+      const reservation = bag.reserve({ origin });
       const show = reservation?.item || null;
       image.vcardShowBag = bag;
       image.vcardShowReservation = reservation;
@@ -8828,21 +8916,6 @@ const createVCardFrameInitializer = () => {
     sitemapButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 7v5M4 16v-4h16v4" fill="none" stroke="currentColor" stroke-width="2"/><g fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="5"/><rect x="1" y="16" width="6" height="6"/><rect x="9" y="16" width="6" height="6"/><rect x="17" y="16" width="6" height="6"/></g><path d="M12 12v4" stroke="currentColor" stroke-width="2"/></svg>';
     playerDock.append(sitemapButton);
     const playerControlsScope = new AbortController();
-    const secretTarget = (target) => target.closest?.('button[data-plyr="mute"]');
-    const secretAction = () => window.VCPlayer?.grayShow?.();
-    document.addEventListener('contextmenu', (event) => {
-      const target = secretTarget(event.target);
-      if (!target) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      secretAction(target);
-    }, { capture: true, signal: playerControlsScope.signal });
-    document.addEventListener('click', (event) => {
-      if (!event.target.closest?.('.plyr__time--current')) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      window.VCPlayer?.nextShow?.();
-    }, { capture: true, signal: playerControlsScope.signal });
     window.addEventListener('pagehide', (event) => {
       if (!event.persisted) playerControlsScope.abort();
     }, { signal: playerControlsScope.signal });
@@ -8879,6 +8952,7 @@ const createVCardFrameInitializer = () => {
       '<span data-debug-value="showProfile">ShowProfile=—</span>',
       '<span data-debug-value="showSource">ShowSource=—</span>',
       '<span data-debug-value="slideLoading">SlideLoading=—</span>',
+      '<span data-debug-value="mask">Mask=—</span>',
       '<span data-debug-value="pageReload">Page.Reload=—</span>',
       '<span data-debug-value="decision">Decision=—</span>',
       '<span data-debug-value="randomSeed">RandomSeed=—</span>',
@@ -8904,6 +8978,10 @@ const createVCardFrameInitializer = () => {
     const debugStyleImage = () => {
       const preview = window.VCLife?.openedSong?.preview;
       return preview && (window.VCardPortal?.imageFor?.(preview) || preview.querySelector('.song__preview-image'));
+    };
+    const debugMaskImage = () => {
+      const preview = window.VCLife?.playingSong?.preview || window.VCLife?.openedSong?.preview;
+      return preview && (window.VCardPortal?.displayedImageFor?.(preview) || debugStyleImage());
     };
     const refreshDebugStyles = () => {
       const image = debugStyleImage();
@@ -8961,6 +9039,7 @@ const createVCardFrameInitializer = () => {
         mediaLoader,
         audioOutput: window.VCardVisualization?.audioOutput?.() || null,
         mediaResources,
+        portalMask: debugMaskImage() ? vcardMedia.portalMaskState(debugMaskImage()) : null,
         renderScheduler: vcardRenderScheduler.snapshot(),
         mediaVersions: { lists: window.VCardMediaManifest?.lists,
           shows: window.VCardMediaManifest?.tvCatalogs },
@@ -9042,6 +9121,12 @@ const createVCardFrameInitializer = () => {
       playerDebug.dataset.styleResourceBytes = String(mediaResources.styleBytes);
       playerDebug.dataset.styleReleased = String(mediaResources.releasedStyleUrls);
       refreshDebugStyles();
+      const maskImage = debugMaskImage();
+      const mask = maskImage ? vcardMedia.portalMaskState(maskImage) : null;
+      playerDebug.dataset.portalMask = JSON.stringify(mask);
+      setDebugValue('mask', 'Mask', mask
+        ? `${mask.reason} mode=${mask.mode} file=${Number(mask.available)} ready=${Number(mask.ready)} preset=${mask.preset}/${mask.choice || mask.preset} accent=${mask.accentEnabled} style=${mask.debugStyle}`
+        : '—');
       playerDebug.dataset.serviceWorker = snapshot?.serviceWorker?.state || '';
       playerDebug.dataset.workerControlled = String(Boolean(snapshot?.serviceWorker?.controlled));
       playerDebug.dataset.operation = String(snapshot?.operation || '');
@@ -10928,15 +11013,24 @@ const createVCardFrameInitializer = () => {
         controls.prepend(sitemapButton);
         const televisionButton = document.createElement('button');
         televisionButton.type = 'button';
-        televisionButton.className = 'plyr__control plyr__controls__item vcard-player-television';
-        televisionButton.dataset.portalToggle = 'image';
-        televisionButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2v10M7 5.5a8.5 8.5 0 1 0 10 0" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="butt"/></svg>';
-        televisionButton.addEventListener('click', (event) => {
-          const input = { type: 'Portal.ToggleVisibility', source: 'Player', target: televisionButton,
-            preview: currentPortalPreview(), trusted: event.isTrusted };
-          if (!window.VCCommands) window.VCardPlayerControls.toggleVisibility(input);
-          else window.VCCommands.dispatch(input);
-        }, { signal: playerControlsScope.signal });
+        if (vcardUiConfig.playerEndButton === 'mobile') {
+          televisionButton.className = 'plyr__control plyr__controls__item vcard-player-mobile';
+          keepPlayerHint(televisionButton, 'Открыть мобильное представление');
+          televisionButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 1v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="5" y="6" width="14" height="16" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="8" y="9" width="8" height="5" fill="currentColor"/><path d="M8 17h2m4 0h2m-8 3h2m4 0h2" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+          televisionButton.addEventListener('click', () => {
+            location.assign(vcardMiniUrl());
+          }, { signal: playerControlsScope.signal });
+        } else {
+          televisionButton.className = 'plyr__control plyr__controls__item vcard-player-television';
+          televisionButton.dataset.portalToggle = 'image';
+          televisionButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2v10M7 5.5a8.5 8.5 0 1 0 10 0" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="butt"/></svg>';
+          televisionButton.addEventListener('click', (event) => {
+            const input = { type: 'Portal.ToggleVisibility', source: 'Player', target: televisionButton,
+              preview: currentPortalPreview(), trusted: event.isTrusted };
+            if (!window.VCCommands) window.VCardPlayerControls.toggleVisibility(input);
+            else window.VCCommands.dispatch(input);
+          }, { signal: playerControlsScope.signal });
+        }
         controls.append(televisionButton);
         projectColorControls(window.VCPlayer?.current?.() || {
           colorSettings: window.VCardDecoration?.current?.(),
@@ -14466,6 +14560,9 @@ const createVCardFrameInitializer = () => {
         if (paletteSignal.aborted || paletteReady) return;
         const restore = window.VCLife?.scenario.profileFor()?.restoreColorScheme();
         const saved = storedPreset();
+        // A non-restoring profile starts with its own choice, including AUTO.
+        // Otherwise the initial DUO palette hides a saved AUTO selection until Play.
+        if (!restore) presetChoice = '';
         applyPreset(restore ? (saved === 'auto' ? vcardStorage.local.getItem('vcard-last-preset') || 'duo' : saved)
           : 'duo', { persist: false });
         paletteReady = true;

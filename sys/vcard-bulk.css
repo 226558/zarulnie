@@ -1145,9 +1145,7 @@ img:is(
 }
 
 .song-vibeframe:not(.shadow-off):not(.has-fullscreen-image) {
-  box-shadow:
-    0 0.08em 0.25em color-mix(in srgb, black 28%, transparent),
-    0 0.18em 0.6em color-mix(in srgb, black 16%, transparent);
+  box-shadow: var(--frame-shadow-large);
 }
 
 :root[data-vis-bri="0"] .song-vibeframe:not(.has-fullscreen-image) {
@@ -1383,6 +1381,10 @@ img:is(
   height: 100%;
   aspect-ratio: auto;
   object-fit: contain;
+}
+
+.song-vibeframe > img.song-portal-idle-still:not(.song-portal-crossani-still) {
+  object-fit: fill;
 }
 
 
@@ -1800,7 +1802,8 @@ img:is(
   height: 0.95em;
 }
 
-.vcard-player-television {
+.vcard-player-television,
+.vcard-player-mobile {
   flex: 0 0 1.35em;
   width: 1.35em;
   height: 1.2em;
@@ -1808,7 +1811,7 @@ img:is(
   margin-inline-start: 0 !important;
 }
 
-.vcard-player-television svg {
+:is(.vcard-player-television, .vcard-player-mobile) svg {
   width: 0.95em;
   height: 0.95em;
 }
@@ -2994,11 +2997,6 @@ html {
 
 :root[data-color-preset="newspaper"] {
   --active-verse-outline: white;
-}
-
-/* Run-scoped presentation; the user's palette and background settings survive. */
-:root[data-show-gray="on"] {
-  filter: grayscale(1);
 }
 
 :root[data-vis-bri="0"] .song__track-verse.is-active {
