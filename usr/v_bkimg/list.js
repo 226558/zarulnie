@@ -1,2 +1,2 @@
 window.VCARD_MEDIA_LISTS ||= {};
-window.VCARD_MEDIA_LISTS[document.currentScript.src] = ["Rough canvas.webp?v=64a682a41828"];
+window.VCARD_MEDIA_LISTS[document.currentScript.src] = ["Fibrous paper.webp?v=d23940f295ed"];
