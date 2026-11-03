@@ -3,41 +3,23 @@
   "style": "s_inverse",
   "profile_sha256": "480ab06fdbb09ebae6c837e3eb679dd5be99e129809b972d1f72cca4e485f81a",
   "files": {
-    "003": {
-      "sha256": "9dfa8728d5473be2c4220208881c4b6f57fb5503f038e89070818c08736f4a69",
+    "002": {
+      "sha256": "a7054b7dc95c2add07821e7bc5fb5ce4ed2638edd3d6f3f50b654cd6439ec00c",
       "input_mode": "color",
       "parameters": {
-        "threshold": 41,
+        "threshold": 32,
         "invert": 1,
         "radius": 0,
         "strength": 0,
         "bias": 0,
-        "black": 22,
-        "white": 60,
+        "black": 20,
+        "white": 43,
         "gamma": 1,
         "out_black": 0,
         "out_white": 255,
         "apply_bitmap": 1
       },
-      "deploy_sha256": "28e680cb2e0b1f4a96540e8878a236da1680ea1eda18f116a02c5928072faed4"
-    },
-    "007": {
-      "sha256": "0f1058bd6b216574a6aa1ea81c26cc6a43bc176a82027bc92a23cc20ddf82e4a",
-      "input_mode": "color",
-      "parameters": {
-        "threshold": 82,
-        "invert": 1,
-        "radius": 0,
-        "strength": 0,
-        "bias": 0,
-        "black": 43,
-        "white": 122,
-        "gamma": 1,
-        "out_black": 0,
-        "out_white": 255,
-        "apply_bitmap": 1
-      },
-      "deploy_sha256": "66f66b301b2148f10b7d0158a09278487b0236db1fb2b61fd8daaf6240d03239"
+      "deploy_sha256": "c4a1612145d8cd0364cefa80755c80bf911d43fdb30aaeeb1cee3014c63e04ed"
     },
     "012": {
       "sha256": "9767d90ad26c32eb32fba666536e7d84cacac79222314e6d105dc3db0708c0e7",
@@ -56,6 +38,24 @@
         "apply_bitmap": 1
       },
       "deploy_sha256": "b2dbf16d52975284083199bdc6b4fcaba14723ab54b727c33ee9978fed1610cc"
+    },
+    "018": {
+      "sha256": "2c51975489de6df0c5b18dea9a032496b1435b97608d7764461e59235bf7a187",
+      "input_mode": "color",
+      "parameters": {
+        "threshold": 36,
+        "invert": 1,
+        "radius": 0,
+        "strength": 0,
+        "bias": 0,
+        "black": 18,
+        "white": 54,
+        "gamma": 1,
+        "out_black": 0,
+        "out_white": 255,
+        "apply_bitmap": 1
+      },
+      "deploy_sha256": "9665497a45031443a7ac2c62f2176564a562f5d33542f03d9a6bd533d8395e6b"
     },
     "020": {
       "sha256": "570d674bcf45267ac1706980f5f311e6ab5328d91d808a9b7281905083d5af15",
