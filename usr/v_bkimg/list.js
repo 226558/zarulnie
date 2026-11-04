@@ -1,2 +1,2 @@
 window.VCARD_MEDIA_LISTS ||= {};
-window.VCARD_MEDIA_LISTS[document.currentScript.src] = ["Fine paper.webp?v=76517cff1a88"];
+window.VCARD_MEDIA_LISTS[document.currentScript.src] = ["Rough laid paper.webp?v=25d088596f9e"];
